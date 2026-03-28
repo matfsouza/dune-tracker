@@ -30,18 +30,6 @@ Ao abrir, será pedida uma **senha**. Peça ao dono do repositório.
 
 ---
 
-## Como alterar a senha
-
-1. Abra o arquivo `index.html`
-2. Procure essa linha no início do JavaScript:
-```javascript
-const SENHA = 'arrakis2024';
-```
-3. Troque `arrakis2024` pela senha que quiser
-4. Salve e faça upload do arquivo no GitHub novamente
-
----
-
 ## Tecnologias usadas
 
 | Tecnologia | Para quê |
