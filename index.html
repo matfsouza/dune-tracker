@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dune Awakening — Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --sand: #c8a96e;
+    --sand-light: #e8d4a0;
+    --rust: #8b3a1a;
+    --rust-dark: #5c2510;
+    --amber: #d4862a;
+    --amber-bright: #f0a030;
+    --dust: #2a1f0e;
+    --dust-mid: #1a1208;
+    --spice: #ff6b1a;
+    --text-main: #e8d4a0;
+    --text-dim: #a08858;
+    --completed: #4a7c59;
+    --completed-glow: rgba(74,124,89,0.3);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Crimson Text',serif;
+    background-color:var(--dust-mid);
+    color:var(--text-main);
+    min-height:100vh;
+    overflow-x:hidden;
+    position:relative;
+  }
+  body::before {
+    content:'';
+    position:fixed;inset:0;
+    background:
+      radial-gradient(ellipse at 20% 0%,rgba(200,169,110,0.12) 0%,transparent 50%),
+      radial-gradient(ellipse at 80% 100%,rgba(139,58,26,0.15) 0%,transparent 50%),
+      radial-gradient(ellipse at 50% 50%,rgba(26,18,8,0.9) 0%,var(--dust-mid) 100%);
+    z-index:0;pointer-events:none;
+  }
+  .container { position:relative;z-index:1;max-width:900px;margin:0 auto;padding:40px 20px 80px; }
+
+  /* HEADER */
+  header { text-align:center;margin-bottom:40px; }
+  .ornament { display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px; }
+  .ornament-line { flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--sand),transparent);max-width:200px; }
+  .ornament-diamond { width:8px;height:8px;background:var(--amber-bright);transform:rotate(45deg);box-shadow:0 0 12px var(--amber-bright); }
+  h1 {
+    font-family:'Cinzel',serif;font-size:clamp(28px,5vw,52px);font-weight:900;letter-spacing:0.1em;
+    background:linear-gradient(180deg,var(--sand-light) 0%,var(--amber) 60%,var(--rust) 100%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px;
+  }
+  .subtitle { font-family:'Cinzel',serif;font-size:12px;letter-spacing:0.4em;color:var(--text-dim);text-transform:uppercase;margin-bottom:16px; }
+
+  /* STATUS BAR */
+  .status-bar { display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap; }
+  .spice-counter {
+    display:inline-flex;align-items:center;gap:10px;
+    background:rgba(255,107,26,0.08);border:1px solid rgba(255,107,26,0.2);
+    padding:8px 20px;border-radius:2px;font-family:'Cinzel',serif;font-size:13px;color:var(--spice);letter-spacing:0.1em;
+  }
+  .spice-dot { width:8px;height:8px;background:var(--spice);border-radius:50%;animation:pulse-spice 2s infinite; }
+  @keyframes pulse-spice {
+    0%,100%{box-shadow:0 0 4px var(--spice);opacity:1;}
+    50%{box-shadow:0 0 16px var(--spice),0 0 32px rgba(255,107,26,0.3);opacity:0.7;}
+  }
+  .sync-indicator {
+    display:inline-flex;align-items:center;gap:8px;
+    background:rgba(74,124,89,0.1);border:1px solid rgba(74,124,89,0.25);
+    padding:8px 16px;border-radius:2px;font-family:'Cinzel',serif;font-size:11px;color:#6abf7b;letter-spacing:0.1em;
+  }
+  .sync-dot { width:7px;height:7px;background:#6abf7b;border-radius:50%;animation:pulse-sync 3s infinite; }
+  @keyframes pulse-sync {
+    0%,100%{opacity:1;}50%{opacity:0.4;}
+  }
+  .sync-indicator.offline { background:rgba(139,58,26,0.1);border-color:rgba(139,58,26,0.3);color:var(--rust); }
+  .sync-indicator.offline .sync-dot { background:var(--rust);animation:none; }
+
+  /* PLAYERS */
+  .players-bar { display:flex;gap:16px;margin:30px 0;justify-content:center;flex-wrap:wrap; }
+  .player-card {
+    background:rgba(200,169,110,0.06);border:1px solid rgba(200,169,110,0.2);
+    padding:14px 24px;border-radius:2px;display:flex;align-items:center;gap:12px;
+    cursor:pointer;transition:all 0.3s;position:relative;overflow:hidden;
+  }
+  .player-card::before { content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(200,169,110,0.1),transparent);opacity:0;transition:opacity 0.3s; }
+  .player-card:hover::before,.player-card.active::before{opacity:1;}
+  .player-card.active { border-color:var(--amber);box-shadow:0 0 20px rgba(212,134,42,0.2),inset 0 0 20px rgba(212,134,42,0.05); }
+  .player-avatar { width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:14px;font-weight:600; }
+  .avatar-all { background:linear-gradient(135deg,#3a2a1a,#1a1208);color:var(--sand);border:1px solid var(--sand); }
+  .avatar-p1 { background:linear-gradient(135deg,var(--rust),var(--rust-dark));color:var(--sand-light);border:1px solid var(--rust); }
+  .avatar-p2 { background:linear-gradient(135deg,#1a3a5c,#0d2238);color:#7ab8d4;border:1px solid #2a5a8c; }
+  .player-name { font-family:'Cinzel',serif;font-size:13px;color:var(--text-main);letter-spacing:0.05em; }
+  .player-progress { font-size:11px;color:var(--text-dim);font-style:italic; }
+
+  /* PROGRESS RINGS */
+  .progress-section { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:20px 0 30px; }
+  .progress-card { background:rgba(200,169,110,0.04);border:1px solid rgba(200,169,110,0.12);padding:24px;border-radius:2px;text-align:center; }
+  .progress-ring-wrap { position:relative;width:80px;height:80px;margin:0 auto 12px; }
+  .progress-ring { transform:rotate(-90deg); }
+  .ring-bg { fill:none;stroke:rgba(200,169,110,0.1);stroke-width:4; }
+  .ring-fill { fill:none;stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1); }
+  .ring-all { stroke:var(--amber); }
+  .ring-p1 { stroke:var(--rust); }
+  .ring-p2 { stroke:#4a8cb4; }
+  .ring-pct { position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:16px;font-weight:600;color:var(--sand-light); }
+  .progress-label { font-family:'Cinzel',serif;font-size:11px;letter-spacing:0.2em;color:var(--text-dim);text-transform:uppercase; }
+
+  /* SECTION */
+  .section-header { display:flex;align-items:center;gap:16px;margin-bottom:16px;margin-top:30px; }
+  .section-title { font-family:'Cinzel',serif;font-size:11px;letter-spacing:0.4em;color:var(--text-dim);text-transform:uppercase;white-space:nowrap; }
+  .section-line { flex:1;height:1px;background:linear-gradient(90deg,rgba(200,169,110,0.3),transparent); }
+
+  /* TASKS */
+  .task-list { display:flex;flex-direction:column;gap:6px;margin-bottom:20px;min-height:40px; }
+  .task-item {
+    display:flex;align-items:center;gap:14px;padding:14px 18px;
+    background:rgba(200,169,110,0.04);border:1px solid rgba(200,169,110,0.12);border-left:2px solid rgba(200,169,110,0.15);
+    border-radius:1px;cursor:pointer;transition:all 0.25s;animation:fadeIn 0.3s ease;
+  }
+  .task-item:hover { background:rgba(200,169,110,0.08);border-color:rgba(200,169,110,0.25);border-left-color:var(--amber);transform:translateX(2px); }
+  .task-item.done { background:rgba(74,124,89,0.06);border-color:rgba(74,124,89,0.2);border-left-color:var(--completed); }
+  .task-item.done .task-text { text-decoration:line-through;color:var(--text-dim);opacity:0.7; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);} }
+
+  .task-check {
+    width:22px;height:22px;border:1px solid rgba(200,169,110,0.4);border-radius:1px;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.25s;background:rgba(0,0,0,0.2);
+  }
+  .task-item.done .task-check { background:var(--completed);border-color:var(--completed);box-shadow:0 0 8px var(--completed-glow); }
+  .check-icon { width:12px;height:12px;fill:none;stroke:white;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:scale(0.5);transition:all 0.2s; }
+  .task-item.done .check-icon { opacity:1;transform:scale(1); }
+  .task-text { font-size:16px;color:var(--text-main);flex:1;transition:all 0.25s; }
+  .task-icon { font-size:16px;opacity:0.7;flex-shrink:0; }
+  .task-who { font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.05em;padding:3px 8px;border-radius:1px;flex-shrink:0; }
+  .task-who.p1 { background:rgba(139,58,26,0.2);color:var(--rust);border:1px solid rgba(139,58,26,0.3); }
+  .task-who.p2 { background:rgba(26,58,92,0.3);color:#7ab8d4;border:1px solid rgba(42,90,140,0.4); }
+  .task-who.both { background:rgba(200,169,110,0.1);color:var(--sand);border:1px solid rgba(200,169,110,0.2); }
+  .del-btn { opacity:0;background:none;border:none;color:var(--rust);cursor:pointer;font-size:14px;padding:4px;transition:opacity 0.2s;flex-shrink:0; }
+  .task-item:hover .del-btn { opacity:1; }
+
+  .empty-state { text-align:center;color:var(--text-dim);padding:30px;font-style:italic; }
+
+  /* ADD */
+  .add-task-area { display:flex;gap:10px;flex-wrap:wrap; }
+  .task-input {
+    flex:1;min-width:200px;background:rgba(0,0,0,0.3);border:1px solid rgba(200,169,110,0.2);
+    color:var(--text-main);padding:12px 16px;font-family:'Crimson Text',serif;font-size:15px;border-radius:1px;outline:none;transition:border-color 0.2s;
+  }
+  .task-input::placeholder { color:var(--text-dim); }
+  .task-input:focus { border-color:var(--amber); }
+  .who-select {
+    background:rgba(0,0,0,0.3);border:1px solid rgba(200,169,110,0.2);color:var(--text-main);
+    padding:12px;font-family:'Cinzel',serif;font-size:11px;border-radius:1px;outline:none;cursor:pointer;letter-spacing:0.05em;
+  }
+  .who-select option { background:var(--dust); }
+  .add-btn {
+    background:linear-gradient(135deg,var(--rust),var(--rust-dark));border:1px solid rgba(139,58,26,0.5);
+    color:var(--sand-light);padding:12px 22px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:0.15em;
+    cursor:pointer;border-radius:1px;transition:all 0.2s;text-transform:uppercase;
+  }
+  .add-btn:hover { background:linear-gradient(135deg,var(--amber),var(--rust));box-shadow:0 0 16px rgba(212,134,42,0.3); }
+  .add-btn:disabled { opacity:0.5;cursor:not-allowed; }
+
+  /* NOTES */
+  .notes-area { background:rgba(0,0,0,0.2);border:1px solid rgba(200,169,110,0.12);border-left:2px solid var(--amber);padding:16px;border-radius:1px; }
+  .notes-input { width:100%;background:transparent;border:none;color:var(--text-main);font-family:'Crimson Text',serif;font-size:15px;line-height:1.7;resize:vertical;min-height:80px;outline:none; }
+  .notes-input::placeholder { color:var(--text-dim);font-style:italic; }
+
+  /* CONFIG */
+  .config-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  @media(max-width:600px) { .config-grid{grid-template-columns:1fr;} }
+  .config-label { font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.2em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px; }
+
+  /* DIVIDER */
+  .divider { display:flex;align-items:center;gap:20px;margin:40px 0; }
+  .divider-line { flex:1;height:1px;background:rgba(200,169,110,0.12); }
+  .divider-glyph { color:var(--text-dim);font-size:18px; }
+
+  /* TOAST */
+  .toast {
+    position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:rgba(26,18,8,0.95);border:1px solid var(--amber);color:var(--sand-light);
+    padding:10px 24px;border-radius:2px;font-family:'Cinzel',serif;font-size:12px;letter-spacing:0.1em;
+    opacity:0;transition:all 0.3s;z-index:100;pointer-events:none;white-space:nowrap;
+  }
+  .toast.show { opacity:1;transform:translateX(-50%) translateY(0); }
+
+  /* LOADING */
+  .loading-overlay {
+    position:fixed;inset:0;background:rgba(26,18,8,0.9);z-index:200;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+    transition:opacity 0.5s;
+  }
+  .loading-overlay.hidden { opacity:0;pointer-events:none; }
+  .loading-title { font-family:'Cinzel',serif;font-size:24px;color:var(--amber);letter-spacing:0.2em; }
+  .loading-sub { font-family:'Crimson Text',serif;font-style:italic;color:var(--text-dim);font-size:14px; }
+  .loader { width:40px;height:40px;border:2px solid rgba(200,169,110,0.1);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+
+  footer { text-align:center;color:var(--text-dim);font-style:italic;font-size:13px;opacity:0.6; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+  <div class="loading-title">ARRAKIS</div>
+  <div class="loader"></div>
+  <div class="loading-sub">Conectando ao banco de dados...</div>
+</div>
+
+<div class="container">
+  <header>
+    <div class="ornament">
+      <div class="ornament-line"></div>
+      <div class="ornament-diamond"></div>
+      <div class="ornament-line"></div>
+    </div>
+    <h1>DUNE AWAKENING</h1>
+    <div class="subtitle">Tracker de Atividades — Arrakis</div>
+    <div class="status-bar">
+      <div class="spice-counter">
+        <div class="spice-dot"></div>
+        <span id="spice-label">Carregando...</span>
+      </div>
+      <div class="sync-indicator" id="sync-indicator">
+        <div class="sync-dot"></div>
+        <span id="sync-label">Sincronizado</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- PLAYERS -->
+  <div class="players-bar">
+    <div class="player-card active" id="card-all" onclick="filterPlayer('all')">
+      <div class="player-avatar avatar-all">⚔</div>
+      <div>
+        <div class="player-name">Todos</div>
+        <div class="player-progress" id="prog-all">—</div>
+      </div>
+    </div>
+    <div class="player-card" id="card-p1" onclick="filterPlayer('p1')">
+      <div class="player-avatar avatar-p1">S</div>
+      <div>
+        <div class="player-name">soninhomatador</div>
+        <div class="player-progress" id="prog-p1">—</div>
+      </div>
+    </div>
+    <div class="player-card" id="card-p2" onclick="filterPlayer('p2')">
+      <div class="player-avatar avatar-p2">?</div>
+      <div>
+        <div class="player-name" id="p2-name-display">Companheiro</div>
+        <div class="player-progress" id="prog-p2">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROGRESS RINGS -->
+  <div class="progress-section">
+    <div class="progress-card">
+      <div class="progress-ring-wrap">
+        <svg class="progress-ring" width="80" height="80" viewBox="0 0 80 80">
+          <circle class="ring-bg" cx="40" cy="40" r="34"/>
+          <circle class="ring-fill ring-all" cx="40" cy="40" r="34" id="ring-all" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+        </svg>
+        <div class="ring-pct" id="pct-all">0%</div>
+      </div>
+      <div class="progress-label">Geral</div>
+    </div>
+    <div class="progress-card">
+      <div class="progress-ring-wrap">
+        <svg class="progress-ring" width="80" height="80" viewBox="0 0 80 80">
+          <circle class="ring-bg" cx="40" cy="40" r="34"/>
+          <circle class="ring-fill ring-p1" cx="40" cy="40" r="34" id="ring-p1" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+        </svg>
+        <div class="ring-pct" id="pct-p1">0%</div>
+      </div>
+      <div class="progress-label">soninhomatador</div>
+    </div>
+    <div class="progress-card">
+      <div class="progress-ring-wrap">
+        <svg class="progress-ring" width="80" height="80" viewBox="0 0 80 80">
+          <circle class="ring-bg" cx="40" cy="40" r="34"/>
+          <circle class="ring-fill ring-p2" cx="40" cy="40" r="34" id="ring-p2" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+        </svg>
+        <div class="ring-pct" id="pct-p2">0%</div>
+      </div>
+      <div class="progress-label" id="p2-ring-label">Companheiro</div>
+    </div>
+  </div>
+
+  <!-- TASKS -->
+  <div class="section-header">
+    <span class="section-title">Missões desta sessão</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="task-list" id="task-list">
+    <div class="empty-state">Carregando missões...</div>
+  </div>
+  <div class="add-task-area">
+    <input class="task-input" id="new-task-input" type="text" placeholder="Adicionar nova atividade..." />
+    <select class="who-select" id="new-task-who">
+      <option value="both">Ambos</option>
+      <option value="p1">soninhomatador</option>
+      <option value="p2" id="p2-option">Companheiro</option>
+    </select>
+    <button class="add-btn" id="add-btn" onclick="addTask()">+ Adicionar</button>
+  </div>
+
+  <div class="divider"><div class="divider-line"></div><div class="divider-glyph">✦</div><div class="divider-line"></div></div>
+
+  <!-- NOTES -->
+  <div class="section-header">
+    <span class="section-title">Notas da expedição</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="notes-area">
+    <textarea class="notes-input" id="notes" placeholder="Anote estratégias, locais de recursos, planos..."></textarea>
+  </div>
+
+  <div class="divider"><div class="divider-line"></div><div class="divider-glyph">⟐</div><div class="divider-line"></div></div>
+
+  <!-- CONFIG -->
+  <div class="section-header">
+    <span class="section-title">Configurações</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="config-grid">
+    <div>
+      <div class="config-label">Nome do companheiro</div>
+      <div class="add-task-area">
+        <input class="task-input" id="p2-name-input" type="text" placeholder="Ex: fulano123..." />
+        <button class="add-btn" onclick="saveP2Name()">Salvar</button>
+      </div>
+    </div>
+    <div>
+      <div class="config-label">Limpar missões concluídas</div>
+      <button class="add-btn" style="width:100%;margin-top:0;" onclick="clearDone()">Limpar concluídas</button>
+    </div>
+  </div>
+
+  <div class="divider"><div class="divider-line"></div><div class="divider-glyph">✦</div><div class="divider-line"></div></div>
+  <footer>A especiaria deve fluir — Arrakis, 10191 AG</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://lvfcyoggwkemsvblgykj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2ZmN5b2dnd2tlbXN2YmxneWtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MzMzNjQsImV4cCI6MjA5MDMwOTM2NH0.rK03xRnsyPyA6pr59z1POfHvwegT-OuimUBpGUW-0s0';
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let tasks = [];
+let currentFilter = 'all';
+let p2Name = localStorage.getItem('dune_p2name') || 'Companheiro';
+let notesTimer = null;
+
+function getIcon(text) {
+  text = text.toLowerCase();
+  if (text.includes('agua') || text.includes('água')) return '💧';
+  if (text.includes('alumin')) return '🔩';
+  if (text.includes('radio') || text.includes('fresa')) return '📡';
+  if (text.includes('buggy')) return '🚗';
+  if (text.includes('areia')) return '🏜️';
+  if (text.includes('mosquito')) return '🦟';
+  if (text.includes('voar')) return '✈️';
+  if (text.includes('aura')) return '⚡';
+  if (text.includes('farm')) return '⚔️';
+  return '◈';
+}
+
+// ── INIT ──────────────────────────────────────────────
+async function init() {
+  updateP2Display();
+  await loadTasks();
+  await loadNotes();
+  subscribeRealtime();
+  hideLoading();
+}
+
+function hideLoading() {
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function setSynced(ok) {
+  const el = document.getElementById('sync-indicator');
+  const label = document.getElementById('sync-label');
+  if (ok) {
+    el.className = 'sync-indicator';
+    label.textContent = 'Sincronizado';
+  } else {
+    el.className = 'sync-indicator offline';
+    label.textContent = 'Offline';
+  }
+}
+
+// ── TASKS ─────────────────────────────────────────────
+async function loadTasks() {
+  const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: true });
+  if (error) { setSynced(false); return; }
+  tasks = data;
+  setSynced(true);
+  render();
+}
+
+async function addTask() {
+  const input = document.getElementById('new-task-input');
+  const who = document.getElementById('new-task-who').value;
+  const text = input.value.trim();
+  if (!text) return;
+
+  const btn = document.getElementById('add-btn');
+  btn.disabled = true;
+  input.value = '';
+
+  const { error } = await db.from('tasks').insert({ text, who, done: false });
+  btn.disabled = false;
+
+  if (error) { showToast('Erro ao adicionar :('); setSynced(false); return; }
+  showToast('Atividade adicionada');
+}
+
+async function toggleTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  const { error } = await db.from('tasks').update({ done: !task.done }).eq('id', id);
+  if (error) { showToast('Erro ao atualizar'); setSynced(false); }
+}
+
+async function deleteTask(id) {
+  const { error } = await db.from('tasks').delete().eq('id', id);
+  if (error) { showToast('Erro ao deletar'); setSynced(false); }
+}
+
+async function clearDone() {
+  const { error } = await db.from('tasks').delete().eq('done', true);
+  if (error) { showToast('Erro ao limpar'); return; }
+  showToast('Missões concluídas removidas');
+}
+
+// ── NOTES ─────────────────────────────────────────────
+async function loadNotes() {
+  const { data } = await db.from('notes').select('content').eq('id', 1).single();
+  if (data) document.getElementById('notes').value = data.content || '';
+}
+
+async function saveNotes() {
+  const content = document.getElementById('notes').value;
+  await db.from('notes').upsert({ id: 1, content });
+}
+
+// ── REALTIME ──────────────────────────────────────────
+function subscribeRealtime() {
+  db.channel('dune-tracker')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+      loadTasks();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, (payload) => {
+      const el = document.getElementById('notes');
+      if (document.activeElement !== el) {
+        el.value = payload.new?.content || '';
+      }
+    })
+    .subscribe((status) => {
+      setSynced(status === 'SUBSCRIBED');
+    });
+}
+
+// ── FILTER & RENDER ───────────────────────────────────
+function filterPlayer(who) {
+  currentFilter = who;
+  document.querySelectorAll('.player-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('card-' + who).classList.add('active');
+  render();
+}
+
+function render() {
+  const list = document.getElementById('task-list');
+  const filtered = currentFilter === 'all' ? tasks : tasks.filter(t => t.who === currentFilter || t.who === 'both');
+
+  list.innerHTML = '';
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state">Nenhuma atividade. A areia aguarda...</div>`;
+  } else {
+    filtered.forEach(task => {
+      const item = document.createElement('div');
+      item.className = 'task-item' + (task.done ? ' done' : '');
+      const whoLabel = task.who === 'p1' ? 'soninhomatador' : task.who === 'p2' ? p2Name : 'Ambos';
+      item.innerHTML = `
+        <div class="task-check" onclick="toggleTask(${task.id})">
+          <svg class="check-icon" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+        </div>
+        <span class="task-icon">${getIcon(task.text)}</span>
+        <span class="task-text">${task.text}</span>
+        <span class="task-who ${task.who}">${whoLabel}</span>
+        <button class="del-btn" onclick="event.stopPropagation();deleteTask(${task.id})" title="Remover">✕</button>
+      `;
+      list.appendChild(item);
+    });
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const all = tasks;
+  const p1t = tasks.filter(t => t.who === 'p1' || t.who === 'both');
+  const p2t = tasks.filter(t => t.who === 'p2' || t.who === 'both');
+  const pct = (done, total) => total === 0 ? 0 : Math.round((done / total) * 100);
+
+  const pAll = pct(all.filter(t=>t.done).length, all.length);
+  const pP1  = pct(p1t.filter(t=>t.done).length, p1t.length);
+  const pP2  = pct(p2t.filter(t=>t.done).length, p2t.length);
+
+  setRing('ring-all','pct-all', pAll);
+  setRing('ring-p1', 'pct-p1', pP1);
+  setRing('ring-p2', 'pct-p2', pP2);
+
+  const allDone = all.filter(t=>t.done).length;
+  document.getElementById('spice-label').textContent = `${allDone} de ${all.length} missões concluídas`;
+  document.getElementById('prog-all').textContent = `${allDone}/${all.length} missões`;
+  document.getElementById('prog-p1').textContent = `${p1t.filter(t=>t.done).length}/${p1t.length} missões`;
+  document.getElementById('prog-p2').textContent = `${p2t.filter(t=>t.done).length}/${p2t.length} missões`;
+}
+
+function setRing(ringId, pctId, pct) {
+  const circ = 213.6;
+  document.getElementById(ringId).style.strokeDashoffset = circ - (circ * pct / 100);
+  document.getElementById(pctId).textContent = pct + '%';
+}
+
+// ── CONFIG ────────────────────────────────────────────
+function saveP2Name() {
+  const val = document.getElementById('p2-name-input').value.trim();
+  if (!val) return;
+  p2Name = val;
+  localStorage.setItem('dune_p2name', p2Name);
+  document.getElementById('p2-name-input').value = '';
+  updateP2Display();
+  render();
+  showToast('Nome salvo: ' + p2Name);
+}
+
+function updateP2Display() {
+  document.getElementById('p2-name-display').textContent = p2Name;
+  document.getElementById('p2-ring-label').textContent = p2Name;
+  document.getElementById('p2-option').textContent = p2Name;
+}
+
+// ── TOAST ─────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── EVENTS ────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  document.getElementById('new-task-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addTask();
+  });
+  document.getElementById('notes').addEventListener('input', () => {
+    clearTimeout(notesTimer);
+    notesTimer = setTimeout(saveNotes, 1000);
+  });
+});
+</script>
+</body>
+</html>
